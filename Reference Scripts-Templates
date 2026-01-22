@@ -1,0 +1,297 @@
+GitHub doesn’t provide a “make all repositories private” button directly in the UI, 
+but you can absolutely do it quickly using one of these three methods, depending on your comfort level.
+
+  Option 1 — Use GitHub CLI (Fastest & Easiest)
+
+If you’re comfortable with the command line:
+
+ 1️Install GitHub CLI
+
+Download from: [https://cli.github.com/](https://cli.github.com/)
+Then log in:
+
+gh auth login
+
+
+ 2️Run this one-liner:
+
+This will loop through all your repositories and set their visibility to `private`:
+
+
+for repo in $(gh repo list YOUR_GITHUB_USERNAME --json name --jq '.[].name'); do
+  gh repo edit "$repo" --visibility private
+  echo "Changed $repo to private"
+done
+
+
+ Notes:
+
+* Replace `YOUR_GITHUB_USERNAME` with your actual username.
+* You need to be the owner of the repos (not just a collaborator).
+* This will skip any repos that are already private.
+
+
+  Option 2 — Use GitHub REST API (Advanced)
+
+If you prefer using an API or want to automate it in scripts:
+
+ 1️Create a Personal Access Token (PAT)
+
+* Go to Settings → Developer Settings → Personal Access Tokens → Tokens (classic)
+* Generate a new token with `repo` scope.
+
+ 2️Use a `curl` command:
+
+
+TOKEN=your_personal_access_token
+USERNAME=your_github_username
+
+for repo in $(curl -s -H "Authorization: token $TOKEN" "https://api.github.com/user/repos?per_page=100" | jq -r '.[].name'); do
+  curl -X PATCH -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github.v3+json" \
+    https://api.github.com/repos/$USERNAME/$repo \
+    -d '{"private": true}'
+  echo "Set $repo to private"
+done
+
+
+🔹 Requires: `jq` installed
+🔹 Works for up to 100 repos per page — you can adjust pagination if needed.
+
+---
+
+  Option 3 — Manual (UI)
+
+If you have only a few repos:
+
+1. Go to each repository → Settings
+2. Scroll to Danger Zone
+3. Click Change repository visibility
+4. Choose Private
+
+This is slower but doesn’t need command-line tools.
+
+---
+
+ ⚠️ Important Notes
+
+* Public forks can’t be made private unless you detach them (delete and recreate manually).
+* Free accounts can now have unlimited private repos (since 2020), but team members may still count toward billing if using GitHub Pro/Team/Enterprise.
+* If you’re part of an organization, ensure you have permission to change visibility.
+
+
+Ready-to-run PowerShell script for Windows that will change all your public GitHub repositories to private in one click
+
+ PowerShell Script: Make All Your GitHub Repos Private
+
+Copy everything below into a new file, e.g. MakeAllReposPrivate.ps1, and run it from PowerShell after installing Git + GitHub CLI.
+
+
+# ==============================================
+# GitHub Bulk Repository Visibility Changer
+# Author: Praveen Madupu (PMSQLDBA)
+# Purpose: Change all repositories to PRIVATE mode
+# Date: (auto-logged below)
+# ==============================================
+
+# ---- Configuration ----
+$OrgName = "PMSQLDBA"
+$LogFile = "D:\Scripts\GitHub_Private_Change_Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+
+# ---- Start Logging ----
+Add-Content $LogFile "=== Starting GitHub Repo Visibility Change ==="
+Add-Content $LogFile "Date: $(Get-Date)"
+Add-Content $LogFile "----------------------------------------------"
+
+# ---- Validate GitHub CLI ----
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    Write-Host "GitHub CLI not found. Please install it from https://cli.github.com/" -ForegroundColor Red
+    exit
+}
+
+# ---- Verify Auth Status ----
+$AuthStatus = gh auth status 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Please authenticate first using: gh auth login --scopes 'repo,admin:repo_hook'" -ForegroundColor Red
+    exit
+}
+
+# ---- Fetch All Repositories ----
+$repos = gh repo list $OrgName --limit 200 --json name,visibility --jq ".[] | [.name, .visibility] | @tsv"
+
+foreach ($line in $repos) {
+    $parts = $line -split "`t"
+    $repoName = $parts[0]
+    $currentVisibility = $parts[1]
+
+    if ($currentVisibility -eq "private") {
+        Add-Content $LogFile "$OrgName/$repoName already private"
+        continue
+    }
+
+    # ---- Attempt to Change Visibility ----
+    Write-Host "Changing $repoName to private..." -ForegroundColor Cyan
+    gh repo edit "$OrgName/$repoName" --visibility private --accept-visibility-change-consequences 2>&1 | Out-Null
+
+    if ($LASTEXITCODE -eq 0) {
+        Add-Content $LogFile "$OrgName/$repoName changed to private"
+        Write-Host "$repoName → Private" -ForegroundColor Green
+    } else {
+        Add-Content $LogFile "$OrgName/$repoName failed to change"
+        Write-Host "$repoName → Failed" -ForegroundColor Red
+    }
+}
+
+Add-Content $LogFile "----------------------------------------------"
+Add-Content $LogFile "Script completed at $(Get-Date)"
+Write-Host "`Completed. Log file saved at: $LogFile" -ForegroundColor Yellow
+
+--> To change from PRIVATE to PUBLIC: 
+
+# ==============================================
+# GitHub Bulk Repository Visibility Changer
+# Author: Praveen Madupu (PMSQLDBA)
+# Purpose: Change all repositories to PUBLIC mode
+# Date: (auto-logged below)
+# ==============================================
+
+# ---- Configuration ----
+$OrgName = "PMSQLDBA"
+$LogFile = "D:\Scripts\01GitHub_Public_Change_Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+
+# ---- Start Logging ----
+Add-Content $LogFile "=== Starting GitHub Repo Visibility Change ==="
+Add-Content $LogFile "Date: $(Get-Date)"
+Add-Content $LogFile "----------------------------------------------"
+
+# ---- Validate GitHub CLI ----
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    Write-Host "GitHub CLI not found. Please install it from https://cli.github.com/" -ForegroundColor Red
+    exit
+}
+
+# ---- Verify Auth Status ----
+$AuthStatus = gh auth status 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Please authenticate first using: gh auth login --scopes 'repo,admin:repo_hook'" -ForegroundColor Red
+    exit
+}
+
+# ---- Fetch All Repositories ----
+$repos = gh repo list $OrgName --limit 200 --json name,visibility --jq ".[] | [.name, .visibility] | @tsv"
+
+foreach ($line in $repos) {
+    $parts = $line -split "`t"
+    $repoName = $parts[0]
+    $currentVisibility = $parts[1]
+
+    if ($currentVisibility -eq "public") {
+        Add-Content $LogFile "$OrgName/$repoName already public"
+        continue
+    }
+
+    # ---- Attempt to Change Visibility ----
+    Write-Host "Changing $repoName to public..." -ForegroundColor Cyan
+    gh repo edit "$OrgName/$repoName" --visibility public --accept-visibility-change-consequences 2>&1 | Out-Null
+
+    if ($LASTEXITCODE -eq 0) {
+        Add-Content $LogFile "$OrgName/$repoName changed to public "
+        Write-Host "$repoName → Public " -ForegroundColor Green
+    } else {
+        Add-Content $LogFile "$OrgName/$repoName failed to change"
+        Write-Host "$repoName → Failed " -ForegroundColor Red
+    }
+}
+
+Add-Content $LogFile "----------------------------------------------"
+Add-Content $LogFile "Script completed at $(Get-Date)"
+Write-Host "`Completed. Log file saved at: $LogFile" -ForegroundColor Yellow
+
+
+--> How to Run It
+
+Open PowerShell as Administrator
+
+Navigate to the folder containing the script, e.g.:
+
+cd C:\Scripts
+
+
+Run the script:
+
+.\MakeAllReposPrivate.ps1
+
+(or)
+
+.\MakeAllReposPublic.ps1
+
+
+Watch it convert each repo — progress will be displayed and also logged at
+📄 C:\RepoChangeLog.txt
+
+
+If you see an error like “git is not recognized…”, then:
+
+Install Git for Windows → https://git-scm.com/download/win
+
+During setup, choose “Add Git to PATH”
+
+Close PowerShell → reopen → retry the script
+
+2️You need “repo” scope authorization
+
+When you logged in via gh auth login, you may not have granted full repo scope.
+Fix:
+
+gh auth logout
+gh auth login
+
+
+Then choose:
+
+ GitHub.com
+
+ HTTPS
+
+ Authenticate Git with your GitHub credentials
+
+ Login with a web browser
+
+When your browser opens, grant “repo” access (this allows editing repo visibility).
+
+Then confirm:
+
+gh auth status
+
+
+It should say:
+
+✓ Logged in to github.com as PMSQLDBA (repo, gist)
+
+3️Re-run one repo manually to test
+
+Try this manually to confirm permissions:
+
+gh repo edit PMSQLDBA/SQL-Server-DB-Security --visibility private --confirm
+
+
+If that works (you see no error), the script will work for all.
+
+4️Check rate limits (optional)
+
+If you’re changing a lot of repos quickly, GitHub might throttle. You can check:
+
+gh api rate_limit
+
+ Next Step (Recommended)
+
+Once you’ve installed Git and re-authenticated with repo scope:
+
+Re-run your script:
+
+.\MakeAllReposPrivate.ps1
+
+You should now see most lines turning into:
+
+ PMSQLDBA/SQL-Server-DB-Security changed to private
+
+
