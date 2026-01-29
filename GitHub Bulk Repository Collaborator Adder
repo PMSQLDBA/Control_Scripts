@@ -1,0 +1,60 @@
+GitHub Bulk Repository Collaborator Adder.ps1
+
+# ==============================================
+# GitHub Bulk Repository Collaborator Adder
+# Author: Praveen Madupu (PMSQLDBA)
+# Purpose: Add collaborator with READ access to all repos
+# Date: (auto-logged below)
+# ==============================================
+
+# ---- Configuration ----
+$OrgName = "PMSQLDBA"
+$GitHubUser = "Prashanthmadari2"   # must be GitHub username (email must be linked)
+$Permission = "pull"                     # pull = READ, push = WRITE
+$LogFile = "D:\Scripts\GitHub_Add_Collaborator_Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+
+# ---- Start Logging ----
+Add-Content $LogFile "=== Starting GitHub Repo Collaborator Add ==="
+Add-Content $LogFile "Date: $(Get-Date)"
+Add-Content $LogFile "Target User: $GitHubUser"
+Add-Content $LogFile "Permission: $Permission"
+Add-Content $LogFile "----------------------------------------------"
+
+# ---- Validate GitHub CLI ----
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    Write-Host "GitHub CLI not found. Please install it from https://cli.github.com/" -ForegroundColor Red
+    exit
+}
+
+# ---- Verify Auth Status ----
+$AuthStatus = gh auth status 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Please authenticate first using: gh auth login --scopes 'repo,admin:org'" -ForegroundColor Red
+    exit
+}
+
+# ---- Fetch All Repositories ----
+$repos = gh repo list $OrgName --limit 500 --json name --jq ".[].name"
+
+foreach ($repoName in $repos) {
+
+    Write-Host "Adding $GitHubUser to $repoName..." -ForegroundColor Cyan
+
+    gh api `
+        --method PUT `
+        "repos/$OrgName/$repoName/collaborators/$GitHubUser" `
+        -f permission=$Permission `
+        2>&1 | Out-Null
+
+    if ($LASTEXITCODE -eq 0) {
+        Add-Content $LogFile "$OrgName/$repoName -> $GitHubUser added with $Permission access"
+        Write-Host "$repoName → Added" -ForegroundColor Green
+    } else {
+        Add-Content $LogFile "$OrgName/$repoName -> FAILED"
+        Write-Host "$repoName → Failed" -ForegroundColor Red
+    }
+}
+
+Add-Content $LogFile "----------------------------------------------"
+Add-Content $LogFile "Script completed at $(Get-Date)"
+Write-Host "Completed. Log file saved at: $LogFile" -ForegroundColor Yellow
